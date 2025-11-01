@@ -1,4 +1,4 @@
-use crate::{adapters::aes_crypto::AesGcmCrypto, domain::traits::CryptoPort};
+use crate::{adapters::{aes_crypto::AesGcmCrypto, file_storage::FileStorage}, domain::traits::{CryptoPort, StoragePort}};
 use zeroize::Zeroize;
 
 mod adapters;
@@ -12,10 +12,16 @@ fn main() {
 
     // Erasing password bytes on memory
     password.zeroize();
+    
+    // file storage instance    
+    let storage = FileStorage::new().custom_path("./".into());
 
     // Enctrypt
     let plaintext = "This is the plaintext".to_string();
     let (ciphertext, nonce) = crypto.encrypt(plaintext.as_bytes());
+
+    
+    storage.save(&ciphertext).unwrap();
 
     // Decrypt
     let decrypted_text = String::from_utf8(crypto.decrypt(&ciphertext, &nonce))
