@@ -1,7 +1,7 @@
 use sha2::{Digest, Sha256};
 use std::{
     fs::{File, create_dir_all},
-    io::{BufReader, Write},
+    io::{BufReader, Read, Write},
     path::PathBuf,
 };
 
@@ -71,11 +71,19 @@ impl StoragePort for FileStorage {
         Ok(())
     }
 
-    fn load(&self) {
-        todo!()
+    fn load(&self) -> Result<Vec<u8>, String> {
+        let mut file = File::open(&self.path)
+            .map_err(|e| format!("File open error: {e}"))?;
+        
+        let mut buffer = Vec::new();
+        
+        file.read_to_end(&mut buffer)
+            .map_err(|e| format!("Read error: {e}"))?;
+        
+        Ok(buffer)
     }
 
-    fn exists(&self) {
-        todo!()
+    fn exists(&self) -> bool {
+        self.path.exists()
     }
 }

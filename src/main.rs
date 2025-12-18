@@ -14,7 +14,7 @@ fn main() {
     password.zeroize();
     
     // file storage instance    
-    let storage = FileStorage::new().custom_path("./".into());
+    let storage = FileStorage::new().custom_path("./passwd.vault".into());
 
     // Enctrypt
     let plaintext = "This is the plaintext".to_string();

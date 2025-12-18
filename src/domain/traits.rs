@@ -6,8 +6,8 @@ pub trait CryptoPort {
 
 pub trait StoragePort {
     fn save(&self, data: &[u8]) -> Result<(), String>;
-    fn load(&self);
-    fn exists(&self);
+    fn load(&self) -> Result<Vec<u8>, String>;
+    fn exists(&self) -> bool;
 }
 
 pub trait EntryManager {
