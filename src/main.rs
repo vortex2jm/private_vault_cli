@@ -1,11 +1,26 @@
-use crate::{adapters::{aes_crypto::AesGcmCrypto, file_storage::FileStorage}, domain::traits::{CryptoPort, StoragePort}};
+use crate::{adapters::{outbound::aes_crypto::AesGcmCrypto, inbound::cli::parse_command, outbound::file_storage::FileStorage}, domain::ports::{CryptoPort, StoragePort}};
 use zeroize::Zeroize;
 
 mod adapters;
-mod core;
+mod application;
 mod domain;
 
 fn main() {
+
+    loop {
+        print!(">vault: ");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).unwrap();
+
+        if let Some(cmd) = parse_command(&input) {
+            
+        } else {
+            print!("Unkown command. Type help to see the options")
+        }
+    }
+
     let mut password = "joao".to_string();
     let salt = AesGcmCrypto::salt_gen();
     let crypto = AesGcmCrypto::new(&password, &salt);
