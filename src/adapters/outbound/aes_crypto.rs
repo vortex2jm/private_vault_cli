@@ -5,7 +5,7 @@ use aes_gcm::{
 use argon2::Argon2;
 use zeroize::{ZeroizeOnDrop};
 
-use crate::domain::traits::CryptoPort;
+use crate::domain::ports::CryptoPort;
 
 
 #[derive(ZeroizeOnDrop)]

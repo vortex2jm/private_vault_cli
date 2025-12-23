@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::domain::traits::StoragePort;
+use crate::domain::ports::StoragePort;
 
 pub struct FileStorage {
     path: PathBuf,
