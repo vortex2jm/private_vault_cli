@@ -25,6 +25,15 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         }
     }
 
+    pub fn create_vault(&mut self, name: &str) {
+        let salt = self.crypto.salt_gen();
+        self.vault_state = Some(VaultState::new(salt));
+    }
+
+    pub fn save(&self) {
+        todo!("Need to serialize entries and state to save in file.")
+    }
+
     pub fn unlock(&mut self, password: &str) -> Result<(), String> {
         if !self.storage.exists() {
             return Err("Create a new vault before trying unlock it!".into());
