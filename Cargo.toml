@@ -12,4 +12,5 @@ dirs-2 = "3.0.1"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10.9"
 uuid = { version = "1.17.0", features = ["v4", "serde"] }
+wincode = { version = "0.2.5", features = ["derive"] }
 zeroize = { version = "1.8.2", features = ["derive"] }

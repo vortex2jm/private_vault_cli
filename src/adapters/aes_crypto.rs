@@ -3,20 +3,18 @@ use aes_gcm::{
     aead::{Aead, OsRng, rand_core::RngCore},
 };
 use argon2::Argon2;
-use zeroize::{ZeroizeOnDrop};
+use zeroize::ZeroizeOnDrop;
 
 use crate::domain::ports::CryptoPort;
 
-
 #[derive(ZeroizeOnDrop)]
 pub struct AesGcmCrypto {
-    key: [u8; 32],
+    key: Option<[u8; 32]>,
 }
 
 impl AesGcmCrypto {
-    pub fn new(password: &str, salt: &[u8]) -> Self {
-        let key = Self::derive_key(password, salt);
-        Self { key }
+    pub fn new() -> Self {
+        Self { key: None }
     }
 
     fn derive_key(password: &str, salt: &[u8]) -> [u8; 32] {
@@ -29,24 +27,29 @@ impl AesGcmCrypto {
 }
 
 impl CryptoPort for AesGcmCrypto {
-    fn encrypt(&self, plaintext: &[u8]) -> (Vec<u8>, Vec<u8>) {
-        let key = Key::<Aes256Gcm>::from(self.key.clone());
+    
+    fn init(&mut self, password: &str, salt: &[u8]) {
+        self.key = Some(Self::derive_key(password, salt));
+    }
+    
+    fn encrypt(&self, plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
+        let key = Key::<Aes256Gcm>::from(self.key.clone().ok_or("Tem que inicializar o cripto")?);
         let cipher = Aes256Gcm::new(&key);
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
         let ciphertext = cipher
             .encrypt(&nonce, plaintext)
             .expect("Encryption failed");
-        (ciphertext, nonce.to_vec())
+        Ok((ciphertext, nonce.to_vec()))
     }
 
-    fn decrypt(&self, ciphertext: &[u8], nonce: &[u8]) -> Vec<u8> {
-        let key = Key::<Aes256Gcm>::from(self.key.clone());
+    fn decrypt(&self, ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>, String> {
+        let key = Key::<Aes256Gcm>::from(self.key.clone().ok_or("Tem que inicializar o cripto")?);
         let cipher = Aes256Gcm::new(&key);
-        let nonce_array: [u8; 12] = nonce.try_into().expect("Nonce must have 12 bytes!");
+        let nonce_array: [u8; 12] = nonce.try_into().map_err(|_| format!("Nonce must have 12 bytes!"))?;
         let plaintext = cipher
             .decrypt(&Nonce::from(nonce_array), ciphertext)
-            .expect("Decryption failed");
-        plaintext
+            .map_err(|_| format!("Decrypt error"))?;
+        Ok(plaintext)
     }
 
     fn salt_gen() -> [u8; 16] {

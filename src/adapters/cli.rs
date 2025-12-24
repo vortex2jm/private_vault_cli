@@ -1,13 +1,18 @@
-use crate::{application::engine_trait::EngineTrait, domain::commands::Command};
+use crate::{domain::commands::Command};
 
-
-pub struct Cli<E: EngineTrait> {
+pub struct Cli<E> {
     engine: E
 }
 
-impl<E: EngineTrait> Cli<E> {
+impl<E> Cli<E> {
 
 }
+
+
+
+
+
+
 
 pub fn parse_command(input: &str) -> Option<Command> {
 
