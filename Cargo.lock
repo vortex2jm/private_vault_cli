@@ -783,6 +783,7 @@ dependencies = [
  "rpassword",
  "serde",
  "sha2",
+ "thiserror",
  "wincode",
  "zeroize",
 ]

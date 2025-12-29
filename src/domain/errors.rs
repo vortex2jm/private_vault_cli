@@ -1,38 +1,55 @@
-#[derive(Debug)]
-pub enum VaultError {
-    /// O vault já está desbloqueado
-    AlreadyUnlocked,
+use thiserror::Error;
 
-    /// O vault está bloqueado e a operação exige unlock
+#[derive(Debug, Error)]
+pub enum VaultError {
+    #[error("Vault is locked")]
     Locked,
 
-    /// O vault está desbloqueado e a operação exige lock
+    #[error("Vault is already unlocked")]
     Unlocked,
 
-    /// Tentativa de lock quando já está locked
-    AlreadyLocked,
+    #[error("Entry already exists")]
+    EntryExists,
 
-    /// Senha inválida
-    InvalidPassword,
+    #[error("Entry not found")]
+    EntryNotFound,
 
-    /// Dados do vault estão corrompidos ou inválidos
-    CorruptedVault,
+    #[error("Entry not found")]
+    VaultNotFound,
 
-    /// Versão do arquivo não suportada
-    UnsupportedVersion(u8),
-
-    /// Erro ao serializar ou desserializar o vault
+    #[error("Serialization failed")]
     Serialization,
 
-    /// Falha ao criptografar ou descriptografar
-    Crypto,
+    #[error("Cryptography error: {0}")]
+    Crypto(#[from] CryptoError),
 
-    /// Erro ao acessar o storage (disco, permissão, etc)
-    Storage,
+    #[error("Storage error: {0}")]
+    Storage(#[from] StorageError),
 
-    /// Entrada já existe
-    EntryAlreadyExists(String),
+    #[error("Invalid password or corrupted vault")]
+    InvalidPassword,
+}
 
-    /// Entrada não encontrada
-    EntryNotFound(String),
+#[derive(Debug, Error)]
+pub enum StorageError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Integrity check failed")]
+    IntegrityError,
+
+    #[error("{0}")]
+    DirNotFound(String),
+}
+
+#[derive(Debug, Error)]
+pub enum CryptoError {
+    #[error("Crypto not initialized")]
+    NotInitialized,
+
+    #[error("Invalid nonce length")]
+    InvalidNonce,
+
+    #[error("Aead error: {0}")]
+    Aead(String),
 }

@@ -5,7 +5,7 @@ use aes_gcm::{
 use argon2::Argon2;
 use zeroize::ZeroizeOnDrop;
 
-use crate::domain::ports::CryptoPort;
+use crate::domain::{errors::CryptoError, ports::CryptoPort};
 
 #[derive(ZeroizeOnDrop)]
 pub struct AesGcmCrypto {
@@ -27,28 +27,27 @@ impl AesGcmCrypto {
 }
 
 impl CryptoPort for AesGcmCrypto {
-    
     fn init(&mut self, password: &str, salt: &[u8]) {
         self.key = Some(Self::derive_key(password, salt));
     }
-    
-    fn encrypt(&self, plaintext: &[u8]) -> Result<(Vec<u8>, [u8; 12]), String> {
-        let key = Key::<Aes256Gcm>::from(self.key.clone().ok_or("Tem que inicializar o cripto")?);
+
+    fn encrypt(&self, plaintext: &[u8]) -> Result<(Vec<u8>, [u8; 12]), CryptoError> {
+        let key = Key::<Aes256Gcm>::from(self.key.clone().ok_or(CryptoError::NotInitialized)?);
         let cipher = Aes256Gcm::new(&key);
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
         let ciphertext = cipher
             .encrypt(&nonce, plaintext)
-            .expect("Encryption failed");
+            .map_err(|e| CryptoError::Aead(e.to_string()))?;
         Ok((ciphertext, nonce.into()))
     }
 
-    fn decrypt(&self, ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>, String> {
-        let key = Key::<Aes256Gcm>::from(self.key.clone().ok_or("Tem que inicializar o cripto")?);
+    fn decrypt(&self, ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        let key = Key::<Aes256Gcm>::from(self.key.clone().ok_or(CryptoError::NotInitialized)?);
         let cipher = Aes256Gcm::new(&key);
-        let nonce_array: [u8; 12] = nonce.try_into().map_err(|_| format!("Nonce must have 12 bytes!"))?;
+        let nonce_array: [u8; 12] = nonce.try_into().map_err(|_| CryptoError::InvalidNonce)?;
         let plaintext = cipher
             .decrypt(&Nonce::from(nonce_array), ciphertext)
-            .map_err(|_| format!("Decrypt error"))?;
+            .map_err(|e| CryptoError::Aead(e.to_string()))?;
         Ok(plaintext)
     }
 
