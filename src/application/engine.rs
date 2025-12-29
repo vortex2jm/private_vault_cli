@@ -5,7 +5,7 @@ use zeroize::Zeroize;
 use crate::domain::{
     entry::Entry,
     ports::{CryptoPort, StoragePort},
-    vault_state::VaultState,
+    vault_state::{self, VaultState},
 };
 
 pub struct VaultEngine<S: StoragePort, C: CryptoPort> {
@@ -25,16 +25,40 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         }
     }
 
-    pub fn create_vault(&mut self, name: &str) {
+    pub fn is_locked(&self) -> bool {
+        self.vault_state.is_none()
+    }
+
+    pub fn create_vault(&mut self, name: &str, password: &str) {
         let salt = self.crypto.salt_gen();
-        self.vault_state = Some(VaultState::new(salt));
+        self.vault_state = Some(VaultState::new(&salt));
+        
+        self.storage.set_path(name.into());
+        self.crypto.init(password, &salt);
     }
 
-    pub fn save(&self) {
-        todo!("Need to serialize entries and state to save in file.")
+    pub fn commit(&mut self) -> Result<(), String> {
+        let vault_state = self.vault_state.as_mut().ok_or("Vault locked")?;
+
+        let mut entries_buffer: Vec<u8> = Vec::new();
+        wincode::serialize_into(&mut entries_buffer, &self.entries)
+            .expect("Erro ao serializar entries");
+
+        let (cipher, nonce) = self.crypto.encrypt(&entries_buffer)?;
+
+        vault_state.cipher = cipher;
+        vault_state.nonce = nonce.into();
+
+        let mut vault_buffer: Vec<u8> = Vec::new();
+        wincode::serialize_into(&mut vault_buffer, vault_state).expect("erro ao serializar vault!");
+
+        self.storage.save(&vault_buffer).expect("Erro ao commitar o cofre!");
+        Ok(())
     }
 
-    pub fn unlock(&mut self, password: &str) -> Result<(), String> {
+    pub fn unlock(&mut self, vault: &str, password: &str) -> Result<(), String> {
+        self.storage.set_path(vault.into());
+
         if !self.storage.exists() {
             return Err("Create a new vault before trying unlock it!".into());
         }
@@ -82,23 +106,27 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         Ok(())
     }
 
-    pub fn add(&self, entry: &str) -> Result<(), String> {
+    pub fn add(&self, service: &str, username: &str, password: &str) -> Result<(), String> {
         todo!()
     }
 
-    pub fn delete(&self, id: usize) -> Result<(), String> {
+    pub fn delete(&self, service: &str) -> Result<(), String> {
         todo!()
     }
 
-    pub fn get(&self, id: usize) -> Result<String, String> {
+    pub fn get(&self, service: &str) -> Result<String, String> {
         todo!()
     }
 
-    pub fn get_all() -> Result<Vec<String>, String> {
+    pub fn get_entries(&self) -> Result<Vec<String>, String> {
         todo!()
     }
 
-    pub fn update(&self, id: usize, entry: &str) -> Result<(), String> {
+    pub fn get_vaults(&self) -> Result<Vec<String>, String> {
         todo!()
     }
+
+    // pub fn update(&self, id: usize, entry: &str) -> Result<(), String> {
+    //     todo!()
+    // }
 }

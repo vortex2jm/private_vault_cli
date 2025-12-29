@@ -18,14 +18,10 @@ impl FileStorage {
         Self { path }
     }
 
-    pub fn custom_path(mut self, path: String) -> Self {
-        self.path = path.into();
-        self
-    }
-
-    pub fn get_path(&self) -> String {
-        self.path.to_string_lossy().into_owned()
-    }
+    // pub fn custom_path(mut self, path: String) -> Self {
+    //     self.path = path.into();
+    //     self
+    // }
 
     fn hash_file(path: &PathBuf) -> Result<Vec<u8>, String> {
         let file = File::open(path).map_err(|e| format!("Open file error: {}", e))?;
@@ -37,6 +33,12 @@ impl FileStorage {
 }
 
 impl StoragePort for FileStorage {
+
+    fn set_path(&mut self, path: String) {
+        self.path = path.into();
+        self.path.push(".vault");
+    }
+
     fn save(&self, data: &[u8]) -> Result<(), String> {
         // Checks dir
         if let Some(parent) = self.path.parent() {

@@ -32,14 +32,14 @@ impl CryptoPort for AesGcmCrypto {
         self.key = Some(Self::derive_key(password, salt));
     }
     
-    fn encrypt(&self, plaintext: &[u8]) -> Result<(Vec<u8>, Vec<u8>), String> {
+    fn encrypt(&self, plaintext: &[u8]) -> Result<(Vec<u8>, [u8; 12]), String> {
         let key = Key::<Aes256Gcm>::from(self.key.clone().ok_or("Tem que inicializar o cripto")?);
         let cipher = Aes256Gcm::new(&key);
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
         let ciphertext = cipher
             .encrypt(&nonce, plaintext)
             .expect("Encryption failed");
-        Ok((ciphertext, nonce.to_vec()))
+        Ok((ciphertext, nonce.into()))
     }
 
     fn decrypt(&self, ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>, String> {

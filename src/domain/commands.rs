@@ -1,12 +1,16 @@
 pub enum Command {
-    Unlock,
+    Unlock(String),
     Lock,
+    
+    Create(String),
     Add {
         service: String,
         username: String,
         password: String,
     },
-    List,
     Remove(String),
+    List,
+    Commit,
+    Help,
     Exit
 }
