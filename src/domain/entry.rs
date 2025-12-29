@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use wincode::{SchemaRead, SchemaWrite};
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, SchemaWrite, SchemaRead, Zeroize)]

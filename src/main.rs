@@ -17,6 +17,7 @@ fn main() {
     let crypto = AesGcmCrypto::new();
     let mut vault_engine = VaultEngine::new(storage, crypto);
 
+    // REPL
     loop {
         print!("vault> ");
         std::io::Write::flush(&mut std::io::stdout()).unwrap();
@@ -24,25 +25,26 @@ fn main() {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
 
+        // Commands interpreter
         if let Some(cmd) = parser::parse_command(&input) {
             match cmd {
                 Command::Unlock(vault) => {
                     let mut password = parser::request_password();
-
                     vault_engine
                         .unlock(&vault, &password)
                         .expect("Could not unlock the Vault!");
-
                     password.zeroize();
                 }
 
                 Command::Lock => {
-                    vault_engine.lock().expect("Erro ao bloquear cofre");
+                    vault_engine.lock().expect("Could not lock the Vault!");
                 }
 
                 Command::Create(name) => {
                     let mut password = parser::request_password();
-                    vault_engine.create_vault(&name, &password);
+                    vault_engine
+                        .create_vault(&name, &password)
+                        .expect("Could not create the Vault!");
                     password.zeroize();
                 }
 
@@ -53,17 +55,16 @@ fn main() {
                 } => {
                     vault_engine
                         .add(&service, &username, &password)
-                        .expect("Erro ao adicionar entrada!");
+                        .expect("Could not add entry to Vault!");
                 }
 
                 Command::Commit => {
-                    // let mut password = parser::request_password();
-                    vault_engine.commit().expect("Erro ao commitar vault");
+                    vault_engine.commit().expect("Could not commit!");
                 }
 
                 Command::List => {
                     if vault_engine.is_locked() {
-                        let vaults = vault_engine.get_vaults().expect("get vaults error");
+                        let vaults = vault_engine.get_vaults().expect("Could not get avaiable Vaults");
 
                         println!("AVAILABLE VAULTS");
                         for vault in vaults {
@@ -72,14 +73,14 @@ fn main() {
                         continue;
                     }
 
-                    let entries = vault_engine.get_entries().expect("get error!");
+                    let entries = vault_engine.get_entries().expect("Could not get Vault entries!");
                     for entry in entries {
                         println!("-> {}", entry);
                     }
                 }
 
                 Command::Get(service) => {
-                    let entry = vault_engine.get(&service).expect("get single error!");
+                    let entry = vault_engine.get(&service).expect("Could not get this entry");
                     println!(
                         "service: {} - user: {} - password: {}",
                         entry.service, entry.username, entry.passwd
@@ -89,7 +90,7 @@ fn main() {
                 Command::Remove(service) => {
                     vault_engine
                         .delete(&service)
-                        .expect("Erro ao deletar entrada!");
+                        .expect("Could not delete entry");
                 }
 
                 Command::Help => {

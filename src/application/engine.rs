@@ -4,6 +4,7 @@ use zeroize::Zeroize;
 
 use crate::domain::{
     entry::Entry,
+    errors::VaultError,
     ports::{CryptoPort, StoragePort},
     vault_state::VaultState,
 };
@@ -29,10 +30,9 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         self.vault_state.is_none()
     }
 
-    pub fn create_vault(&mut self, name: &str, password: &str) -> Result<(), String> {
-
+    pub fn create_vault(&mut self, name: &str, password: &str) -> Result<(), VaultError> {
         if !self.is_locked() {
-            return Err("Lock the current vault before creating a new one!".into());
+            return Err(VaultError::Unlocked);
         }
 
         let salt = self.crypto.salt_gen();
@@ -44,20 +44,24 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         Ok(())
     }
 
-    pub fn commit(&mut self) -> Result<(), String> {
-        let vault_state = self.vault_state.as_mut().ok_or("Vault locked")?;
+    pub fn commit(&mut self) -> Result<(), VaultError> {
+        let vault_state = self.vault_state.as_mut().ok_or(VaultError::Locked)?;
 
         let mut entries_buffer: Vec<u8> = Vec::new();
         wincode::serialize_into(&mut entries_buffer, &self.entries)
             .expect("Error on entries serialization");
 
-        let (cipher, nonce) = self.crypto.encrypt(&entries_buffer)?;
+        let (cipher, nonce) = self
+            .crypto
+            .encrypt(&entries_buffer)
+            .map_err(|_| VaultError::Crypto)?;
 
         vault_state.cipher = cipher;
         vault_state.nonce = nonce.into();
 
         let mut vault_buffer: Vec<u8> = Vec::new();
-        wincode::serialize_into(&mut vault_buffer, vault_state).expect("Error on vault serialization");
+        wincode::serialize_into(&mut vault_buffer, vault_state)
+            .map_err(|_| VaultError::Serialization)?;
 
         self.storage
             .save(&vault_buffer)
@@ -81,8 +85,8 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         let buffer = self.storage.load().expect("Error on unlock buffer loading");
 
         // Deserialize into vault state
-        let v_state: VaultState =
-            wincode::deserialize_from(&mut buffer.as_slice()).expect("Error on vault deserialization");
+        let v_state: VaultState = wincode::deserialize_from(&mut buffer.as_slice())
+            .expect("Error on vault deserialization");
         self.vault_state = Some(v_state.clone());
 
         // Derive key
@@ -154,5 +158,5 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
 
     pub fn get_vaults(&self) -> Result<Vec<String>, String> {
         self.storage.list_vaults()
-    }    
+    }
 }

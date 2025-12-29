@@ -6,6 +6,9 @@ pub enum VaultError {
     /// O vault está bloqueado e a operação exige unlock
     Locked,
 
+    /// O vault está desbloqueado e a operação exige lock
+    Unlocked,
+
     /// Tentativa de lock quando já está locked
     AlreadyLocked,
 
