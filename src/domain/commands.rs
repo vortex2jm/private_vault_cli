@@ -1,7 +1,6 @@
 pub enum Command {
     Unlock(String),
     Lock,
-    
     Create(String),
     Add {
         service: String,
@@ -10,6 +9,7 @@ pub enum Command {
     },
     Remove(String),
     List,
+    Get(String),
     Commit,
     Help,
     Exit

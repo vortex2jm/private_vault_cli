@@ -1,6 +1,6 @@
 use sha2::{Digest, Sha256};
 use std::{
-    fs::{File, create_dir_all},
+    fs::{self, File, create_dir_all},
     io::{BufReader, Read, Write},
     path::PathBuf,
 };
@@ -8,20 +8,18 @@ use std::{
 use crate::domain::ports::StoragePort;
 
 pub struct FileStorage {
+    base_path: PathBuf,
     path: PathBuf,
 }
 
 impl FileStorage {
     pub fn new() -> Self {
         let home = dirs_2::home_dir().expect("Could not find home dir!");
-        let path = home.join(std::env::var("VAULT_PATH").unwrap_or(".vault/vault.bin".into()));
-        Self { path }
-    }
+        let base_path = home.join(".vault");
 
-    // pub fn custom_path(mut self, path: String) -> Self {
-    //     self.path = path.into();
-    //     self
-    // }
+        let path = base_path.join("default.vault");
+        Self { path: path, base_path: base_path }
+    }
 
     fn hash_file(path: &PathBuf) -> Result<Vec<u8>, String> {
         let file = File::open(path).map_err(|e| format!("Open file error: {}", e))?;
@@ -33,10 +31,9 @@ impl FileStorage {
 }
 
 impl StoragePort for FileStorage {
-
-    fn set_path(&mut self, path: String) {
-        self.path = path.into();
-        self.path.push(".vault");
+    fn set_path(&mut self, mut path: String) {
+        path.push_str(".vault");
+        self.path = self.base_path.join(path);
     }
 
     fn save(&self, data: &[u8]) -> Result<(), String> {
@@ -49,7 +46,7 @@ impl StoragePort for FileStorage {
         let backup_path = self.path.with_extension("bkp");
         if self.path.exists() {
             std::fs::copy(&self.path, &backup_path)
-                .map_err(|e| format!("Temporary backup error: {}", e))?;    //TODO: error in first try
+                .map_err(|e| format!("Temporary backup error: {}", e))?; //TODO: error in first try
 
             // Valida integridade do backup
             let orig_hash = FileStorage::hash_file(&self.path)?;
@@ -60,7 +57,7 @@ impl StoragePort for FileStorage {
         }
 
         let mut file = File::create(&self.path).map_err(|e| format!("File create error: {}", e))?;
-        
+
         if let Err(e) = file.write_all(data).and_then(|_| file.sync_all()) {
             // Se falhar, restaura backup
             if backup_path.exists() {
@@ -74,18 +71,42 @@ impl StoragePort for FileStorage {
     }
 
     fn load(&self) -> Result<Vec<u8>, String> {
-        let mut file = File::open(&self.path)
-            .map_err(|e| format!("File open error: {e}"))?;
-        
+        let mut file = File::open(&self.path).map_err(|e| format!("File open error: {e}"))?;
+
         let mut buffer = Vec::new();
-        
+
         file.read_to_end(&mut buffer)
             .map_err(|e| format!("Read error: {e}"))?;
-        
+
         Ok(buffer)
     }
 
     fn exists(&self) -> bool {
         self.path.exists()
+    }
+
+    fn list_vaults(&self) -> Result<Vec<String>, String> {
+        let home = dirs_2::home_dir().ok_or("Could not find home direcory")?;
+        let vault_dir = home.join(".vault");
+
+        if !vault_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut vaults = Vec::new();
+
+        for entry in fs::read_dir(&vault_dir).map_err(|e| format!("Read dir error: {e}"))? {
+            let entry = entry.map_err(|e| format!("Dir entry error: {e}"))?;
+            let path = entry.path();
+
+            // Filtra apenas arquivos com extensão ".vault"
+            if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("vault") {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    vaults.push(stem.to_string());
+                }
+            }
+        }
+
+        Ok(vaults)
     }
 }

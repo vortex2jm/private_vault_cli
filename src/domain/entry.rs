@@ -5,19 +5,17 @@ use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, SchemaWrite, SchemaRead, Zeroize)]
 pub struct Entry {
-    id: [u8; 16],
-    service: String,
-    username: String,
-    passwd: String,
+    pub service: String,
+    pub username: String,
+    pub passwd: String,
     created_at: i64,
     updated_at: i64,
 }
 
 impl Entry {
-    fn new(service: String, username: String, passwd: String) -> Self {
+    pub fn new(service: String, username: String, passwd: String) -> Self {
         let now = chrono::Utc::now().timestamp();
         Self {
-            id: *Uuid::new_v4().as_bytes(),
             service,
             username,
             passwd,

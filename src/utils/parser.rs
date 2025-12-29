@@ -7,7 +7,8 @@ pub fn parse_command(input: &str) -> Option<Command> {
     match cmd {
         "unlock" => Some(Command::Unlock(parts.next()?.to_string())),
         "lock" => Some(Command::Lock),
-        "list" => Some(Command::List),
+        "ls" => Some(Command::List),
+        "get" => Some(Command::Get(parts.next()?.to_string())),
         "create" => Some(Command::Create(parts.next()?.to_string())),
         "add" => {
             let service: String = parts.next()?.to_string();
@@ -21,7 +22,7 @@ pub fn parse_command(input: &str) -> Option<Command> {
         }
         "commit" => Some(Command::Commit),
         // "edit" => None,
-        "remove" => Some(Command::Remove(parts.next()?.to_string())),
+        "rm" => Some(Command::Remove(parts.next()?.to_string())),
         "exit" => Some(Command::Exit),
         "help" => Some(Command::Help),
         _ => None,

@@ -6,8 +6,9 @@ pub trait CryptoPort {
 }
 
 pub trait StoragePort {
-    fn set_path(&mut self, path: String);
-    fn save(&self, data: &[u8]) -> Result<(), String>;
-    fn load(&self) -> Result<Vec<u8>, String>;
+    fn list_vaults(&self) -> Result<Vec<String>, String>;
     fn exists(&self) -> bool;
+    fn set_path(&mut self, path: String);
+    fn load(&self) -> Result<Vec<u8>, String>;
+    fn save(&self, data: &[u8]) -> Result<(), String>;
 }
