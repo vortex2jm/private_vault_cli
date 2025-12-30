@@ -3,10 +3,7 @@ use std::collections::BTreeMap;
 use zeroize::Zeroize;
 
 use crate::domain::{
-    entry::Entry,
-    errors::VaultError,
-    ports::{CryptoPort, StoragePort},
-    vault_state::VaultState,
+    errors::VaultError, models::{Entry, VaultState}, ports::{CryptoPort, StoragePort}
 };
 
 pub struct VaultEngine<S: StoragePort, C: CryptoPort> {

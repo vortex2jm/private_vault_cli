@@ -6,7 +6,6 @@ use crate::{
 mod adapters;
 mod application;
 mod domain;
-mod utils;
 
 fn main() -> anyhow::Result<()> {    
     let storage = FileStorage::new();

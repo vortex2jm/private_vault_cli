@@ -1,5 +1,5 @@
-use wincode::{SchemaRead, SchemaWrite};
 use serde::{Deserialize, Serialize};
+use wincode::{SchemaRead, SchemaWrite};
 use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, SchemaWrite, SchemaRead, Zeroize)]
@@ -20,6 +20,23 @@ impl Entry {
             passwd,
             created_at: now,
             updated_at: now,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, SchemaWrite, SchemaRead)]
+pub struct VaultState {
+    pub salt: [u8; 16],
+    pub nonce: [u8; 12],
+    pub cipher: Vec<u8>,
+}
+
+impl VaultState {
+    pub fn new(salt: &[u8; 16]) -> Self {
+        Self {
+            salt: salt.clone(),
+            nonce: [0; 12],
+            cipher: vec![],
         }
     }
 }

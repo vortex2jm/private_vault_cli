@@ -3,10 +3,26 @@ use std::io::{self, Write};
 use zeroize::Zeroize;
 
 use crate::{
-    application::{commands::Command, engine::VaultEngine},
+    application::engine::VaultEngine,
     domain::ports::{CryptoPort, StoragePort},
-    utils::parser,
 };
+
+enum Command {
+    Unlock(String),
+    Lock,
+    Create(String),
+    Add {
+        service: String,
+        username: String,
+        password: String,
+    },
+    Remove(String),
+    List,
+    Get(String),
+    Commit,
+    Help,
+    Exit,
+}
 
 pub struct VaultCli<S: StoragePort, C: CryptoPort> {
     engine: VaultEngine<S, C>,
@@ -35,7 +51,7 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
             }
 
             // Parse commands
-            let cmd = match parser::parse_command(input) {
+            let cmd = match Self::parse_command(input) {
                 Some(c) => c,
                 None => {
                     println!("Unknown command. Type 'help' to see available options.");
@@ -59,11 +75,40 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
         Ok(())
     }
 
+    fn parse_command(input: &str) -> Option<Command> {
+        let mut parts = input.trim().split_whitespace();
+        let cmd = parts.next()?;
+
+        match cmd {
+            "unlock" => Some(Command::Unlock(parts.next()?.to_string())),
+            "lock" => Some(Command::Lock),
+            "ls" => Some(Command::List),
+            "get" => Some(Command::Get(parts.next()?.to_string())),
+            "create" => Some(Command::Create(parts.next()?.to_string())),
+            "add" => {
+                let service: String = parts.next()?.to_string();
+                let username: String = parts.next()?.to_string();
+                let password: String = parts.next()?.to_string();
+                Some(Command::Add {
+                    service,
+                    username,
+                    password,
+                })
+            }
+            "commit" => Some(Command::Commit),
+            // "edit" => None,
+            "rm" => Some(Command::Remove(parts.next()?.to_string())),
+            "exit" => Some(Command::Exit),
+            "help" => Some(Command::Help),
+            _ => None,
+        }
+    }
+
     /// Command dispatcher (returns Result to enable use of the '?' operator)
     fn handle_command(&mut self, cmd: Command) -> Result<()> {
         match cmd {
             Command::Unlock(vault) => {
-                let mut password = parser::request_password();
+                let mut password = Self::request_password();
                 let res = self.engine.unlock(&vault, &password).with_context(|| {
                     format!(
                         "Could not open vault '{}'. Please check the name and password.",
@@ -76,7 +121,7 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
             }
 
             Command::Create(name) => {
-                let mut password = parser::request_password();
+                let mut password = Self::request_password();
                 let res = self
                     .engine
                     .create_vault(&name, &password)
@@ -139,6 +184,13 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
     }
 
     // --- Support Helpers ---
+
+    fn request_password() -> String {
+        print!("password: ");
+        std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        let password = rpassword::read_password().unwrap();
+        password
+    }
 
     fn handle_list(&self) -> Result<()> {
         if self.engine.is_locked() {
