@@ -27,6 +27,14 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         self.vault_state.is_none()
     }
 
+    fn current_vault(&self) -> Option<&str>{
+        Some("teste")
+    }
+
+    fn is_dirty(&self) -> bool{
+        true
+    }
+
     pub fn create_vault(&mut self, name: &str, password: &str) -> Result<(), VaultError> {
         if !self.is_locked() {
             return Err(VaultError::Unlocked);

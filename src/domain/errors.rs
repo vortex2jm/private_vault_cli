@@ -14,7 +14,7 @@ pub enum VaultError {
     #[error("Entry not found")]
     EntryNotFound,
 
-    #[error("Entry not found")]
+    #[error("Vault not found")]
     VaultNotFound,
 
     #[error("Serialization failed")]

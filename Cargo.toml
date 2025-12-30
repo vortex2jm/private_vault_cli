@@ -10,6 +10,7 @@ argon2 = "0.5.3"
 chrono = { version = "0.4.41", features = ["serde"] }
 dirs-2 = "3.0.1"
 rpassword = "7.4.0"
+rustyline = "17.0.2"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10.9"
 thiserror = "2.0.17"

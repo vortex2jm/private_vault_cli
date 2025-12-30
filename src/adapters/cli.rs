@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use rustyline::{Editor, error::ReadlineError, history::DefaultHistory};
 use std::io::{self, Write};
 use zeroize::Zeroize;
 
@@ -7,240 +8,262 @@ use crate::{
     domain::ports::{CryptoPort, StoragePort},
 };
 
+const BLUE: &str = "\x1b[34m";
+const GREEN: &str = "\x1b[32m";
+const RED: &str = "\x1b[31m";
+const YELLOW: &str = "\x1b[33m";
+const RESET: &str = "\x1b[0m";
+
 enum Command {
-    Unlock(String),
     Lock,
-    Create(String),
-    Add {
-        service: String,
-        username: String,
-        password: String,
-    },
-    Remove(String),
     List,
-    Get(String),
-    Commit,
     Help,
     Exit,
+    Commit,
+    Get(String),
+    Unlock(String),
+    Create(String),
+    Remove(String),
+    Add { service: String, username: String },
 }
 
 pub struct VaultCli<S: StoragePort, C: CryptoPort> {
     engine: VaultEngine<S, C>,
+    rl: Editor<(), DefaultHistory>,
 }
 
 impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
-    pub fn new(engine: VaultEngine<S, C>) -> Self {
-        Self { engine }
+    pub fn new(engine: VaultEngine<S, C>) -> Result<Self> {
+        Ok(Self {
+            engine,
+            rl: Editor::<(), DefaultHistory>::new()?,
+        })
     }
 
-    /// Main entry point for the CLI loop
     pub fn run(&mut self) -> Result<()> {
-        println!("--- Vault CLI v1.0 ---");
+        println!("--- Vault CLI v1.1 ---");
+        println!("Type 'help' to see available commands.\n");
 
         loop {
-            self.flush_prompt()?;
+            let prompt = self.prompt();
+            let line = match self.rl.readline(&prompt) {
+                Ok(line) => {
+                    self.rl.add_history_entry(line.as_str())?;
+                    line
+                }
+                Err(ReadlineError::Interrupted) => {
+                    println!("^C");
+                    continue;
+                }
+                Err(ReadlineError::Eof) => {
+                    println!("exit");
+                    break;
+                }
+                Err(err) => return Err(err.into()),
+            };
 
-            let mut input = String::new();
-            io::stdin()
-                .read_line(&mut input)
-                .context("Failed to read user input from stdin")?;
-
-            let input = input.trim();
+            let input = line.trim();
             if input.is_empty() {
                 continue;
             }
 
-            // Parse commands
-            let cmd = match Self::parse_command(input) {
-                Some(c) => c,
+            let cmd = match self.parse_command(input) {
+                Some(cmd) => cmd,
                 None => {
-                    println!("Unknown command. Type 'help' to see available options.");
+                    println!("Unknown command. Type 'help'.");
                     continue;
                 }
             };
 
-            // Exit is the only command that breaks the loop directly
             if let Command::Exit = cmd {
-                println!("👋 Goodbye!");
+                println!("Closing vault CLI.");
                 break;
             }
 
-            // Process the command and capture any errors
             if let Err(e) = self.handle_command(cmd) {
-                // Anyhow's {:?} prints the full error chain/context
-                eprintln!("Error: {:?}", e);
+                eprintln!("Error: {:#}", e);
             }
         }
 
         Ok(())
     }
 
-    fn parse_command(input: &str) -> Option<Command> {
-        let mut parts = input.trim().split_whitespace();
+    // =========================
+    // Parsing
+    // =========================
+
+    fn parse_command(&self, input: &str) -> Option<Command> {
+        let mut parts = input.split_whitespace();
         let cmd = parts.next()?;
 
         match cmd {
             "unlock" => Some(Command::Unlock(parts.next()?.to_string())),
             "lock" => Some(Command::Lock),
-            "ls" => Some(Command::List),
+            "ls" | "list" => Some(Command::List),
             "get" => Some(Command::Get(parts.next()?.to_string())),
             "create" => Some(Command::Create(parts.next()?.to_string())),
-            "add" => {
-                let service: String = parts.next()?.to_string();
-                let username: String = parts.next()?.to_string();
-                let password: String = parts.next()?.to_string();
-                Some(Command::Add {
-                    service,
-                    username,
-                    password,
-                })
-            }
+            "add" => Some(Command::Add {
+                service: parts.next()?.to_string(),
+                username: parts.next()?.to_string(),
+            }),
             "commit" => Some(Command::Commit),
-            // "edit" => None,
-            "rm" => Some(Command::Remove(parts.next()?.to_string())),
-            "exit" => Some(Command::Exit),
+            "rm" | "remove" => Some(Command::Remove(parts.next()?.to_string())),
+            "exit" | "quit" => Some(Command::Exit),
             "help" => Some(Command::Help),
             _ => None,
         }
     }
 
-    /// Command dispatcher (returns Result to enable use of the '?' operator)
+    // =========================
+    // Command handling
+    // =========================
+
     fn handle_command(&mut self, cmd: Command) -> Result<()> {
         match cmd {
             Command::Unlock(vault) => {
-                let mut password = Self::request_password();
-                let res = self.engine.unlock(&vault, &password).with_context(|| {
-                    format!(
-                        "Could not open vault '{}'. Please check the name and password.",
-                        vault
-                    )
-                });
+                let mut password = self.request_password("Vault password: ");
+                let res = self
+                    .engine
+                    .unlock(&vault, &password)
+                    .with_context(|| format!("Could not unlock vault '{}'", vault));
                 password.zeroize();
-                res?; // Propagate error after clearing sensitive data
-                println!("🔓 Vault '{}' unlocked successfully!", vault);
+                res?;
+                println!("Vault '{}' unlocked.", vault);
             }
 
             Command::Create(name) => {
-                let mut password = Self::request_password();
+                let mut password = self.request_password("New vault password: ");
                 let res = self
                     .engine
                     .create_vault(&name, &password)
-                    .context("Failed to create the new vault");
+                    .context("Failed to create vault");
                 password.zeroize();
                 res?;
-                println!("✅ Vault '{}' created successfully.", name);
+                println!("Vault '{}' created.", name);
             }
 
-            Command::Add {
-                service,
-                username,
-                password,
-            } => {
+            Command::Add { service, username } => {
+                let mut password = self.request_password("Service password: ");
                 self.engine
                     .add(&service, &username, &password)
-                    .with_context(|| format!("Failed to add service '{}' to memory.", service))?;
-                println!("➕ Entry for '{}' added to memory buffer.", service);
+                    .with_context(|| format!("Failed to add '{}'", service))?;
+                password.zeroize();
+                println!("Entry '{}' added to memory.", service);
             }
 
             Command::Commit => {
-                self.engine
-                    .commit()
-                    .context("Critical failure while persisting data to disk")?;
-                println!("💾 Changes successfully committed to disk!");
+                self.engine.commit().context("Failed to persist data")?;
+                println!("Changes committed to disk.");
             }
 
             Command::List => self.handle_list()?,
 
             Command::Get(service) => {
-                let entry = self.engine.get(&service).with_context(|| {
-                    format!("Service '{}' not found in the current vault.", service)
-                })?;
+                let entry = self
+                    .engine
+                    .get(&service)
+                    .with_context(|| format!("Service '{}' not found", service))?;
                 println!(
-                    "🔑 [{}] User: {} | Pass: {}",
+                    "[{}]\n  user: {}\n  pass: {}",
                     entry.service, entry.username, entry.passwd
                 );
             }
 
             Command::Remove(service) => {
-                self.engine.delete(&service).with_context(|| {
-                    format!("Error while removing service '{}' from memory.", service)
-                })?;
-                println!("🗑️ Entry '{}' removed from memory.", service);
+                if !self.confirm(&format!("Remove '{}'?", service)) {
+                    println!("Aborted.");
+                    return Ok(());
+                }
+                self.engine
+                    .delete(&service)
+                    .with_context(|| format!("Failed to remove '{}'", service))?;
+                println!("Entry '{}' removed.", service);
             }
 
             Command::Lock => {
-                self.engine
-                    .lock()
-                    .context("Error while locking the vault")?;
-                println!("🔒 Vault locked and memory cleared.");
+                self.engine.lock().context("Failed to lock vault")?;
+                println!("Vault locked and memory wiped.");
             }
 
             Command::Help => Self::print_help(),
 
-            Command::Exit => unreachable!(), // Handled in the main loop
+            Command::Exit => unreachable!(),
         }
 
         Ok(())
     }
 
-    // --- Support Helpers ---
+    // =========================
+    // Helpers
+    // =========================
 
-    fn request_password() -> String {
-        print!("password: ");
-        std::io::Write::flush(&mut std::io::stdout()).unwrap();
-        let password = rpassword::read_password().unwrap();
-        password
+    fn prompt(&self) -> String {
+        if self.engine.is_locked() {
+            format!("{BLUE}vault{RESET}[{RED}locked{RESET}]> ",)
+        } else {
+            format!("{BLUE}vault{RESET}[{GREEN}unlocked{RESET}]> ",)
+        }
+    }
+
+    fn request_password(&self, label: &str) -> String {
+        print!("{}", label);
+        io::stdout().flush().unwrap();
+        rpassword::read_password().unwrap()
+    }
+
+    fn confirm(&self, msg: &str) -> bool {
+        print!("{} (y/N): ", msg);
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).ok();
+        matches!(input.trim(), "y" | "Y" | "yes" | "YES")
     }
 
     fn handle_list(&self) -> Result<()> {
         if self.engine.is_locked() {
-            let vaults = self
-                .engine
-                .get_vaults()
-                .context("Error listing vault files from storage")?;
-            println!("AVAILABLE VAULTS ON DISK:");
+            let vaults = self.engine.get_vaults().context("Failed to list vaults")?;
+            println!("Vaults on disk:");
             if vaults.is_empty() {
-                println!("  (No vaults found)");
+                println!("  (none)");
             }
             for v in vaults {
-                println!("  -> {}", v);
+                println!("  - {}", v);
             }
         } else {
             let entries = self
                 .engine
                 .get_entries()
-                .context("Error reading entries from memory")?;
-            println!("ENTRIES IN CURRENT VAULT:");
+                .context("Failed to list entries")?;
+            println!("Entries:");
             if entries.is_empty() {
-                println!("  (Vault is currently empty)");
+                println!("  (empty)");
             }
-            for entry in entries {
-                println!("  -> {}", entry);
+            for e in entries {
+                println!("  - {}", e);
             }
         }
         Ok(())
-    }
-
-    fn flush_prompt(&self) -> Result<()> {
-        print!("vault> ");
-        io::stdout().flush().context("Error flushing stdout buffer")
     }
 
     fn print_help() {
         println!(
             r#"
 AVAILABLE COMMANDS:
-  create <name>          Create a new vault file (.vault)
-  unlock <name>          Open and decrypt an existing vault
-  add <svc> <usr> <pw>   Add an entry (memory only, use commit to save)
-  commit                 Persist memory entries to disk
-  list                   List available vaults (if locked) or entries (if open)
-  get <svc>              Show details of a specific entry
-  remove <svc>           Remove an entry from memory
-  lock                   Lock current vault and wipe memory
-  help                   Show this help message
-  exit                   Close the application
-        "#
+
+  create <name>            Create a new vault
+  unlock <name>            Unlock an existing vault
+  lock                     Lock vault and wipe memory
+
+  add <service> <user>     Add entry (password prompted securely)
+  get <service>            Show entry details
+  rm <service>             Remove entry (with confirmation)
+  commit                   Persist changes to disk
+
+  ls | list                List vaults or entries
+  help                     Show this message
+  exit | quit              Exit the application
+"#
         );
     }
 }
