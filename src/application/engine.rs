@@ -39,7 +39,7 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         self.vault_state = Some(VaultState::new(&salt));
 
         self.storage.set_path(name.into());
-        self.crypto.init(password, &salt);
+        self.crypto.init(password, &salt)?;
 
         Ok(())
     }
@@ -47,19 +47,16 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
     pub fn commit(&mut self) -> Result<(), VaultError> {
         let vault_state = self.vault_state.as_mut().ok_or(VaultError::Locked)?;
 
-        let mut entries_buffer: Vec<u8> = Vec::new();
-
+        let mut entries_buffer = Vec::new();
         wincode::serialize_into(&mut entries_buffer, &self.entries)
             .map_err(|_| VaultError::Serialization)?;
 
-        let (cipher, nonce) = self
-            .crypto
-            .encrypt(&entries_buffer)?;
+        let (cipher, nonce) = self.crypto.encrypt(&entries_buffer)?;
 
         vault_state.cipher = cipher;
-        vault_state.nonce = nonce.into();
+        vault_state.nonce = nonce;
 
-        let mut vault_buffer: Vec<u8> = Vec::new();
+        let mut vault_buffer = Vec::new();
         wincode::serialize_into(&mut vault_buffer, vault_state)
             .map_err(|_| VaultError::Serialization)?;
 
@@ -75,29 +72,32 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
             return Err(VaultError::VaultNotFound);
         }
 
+        // Do not unlock if it's already unlocked
         if !self.is_locked() {
-            return Err(VaultError::Locked);
+            return Err(VaultError::Unlocked);
         }
 
-        // Loads file bytes
+        // Load file bytes
         let buffer = self.storage.load()?;
 
         // Deserialize into vault state
         let v_state: VaultState = wincode::deserialize_from(&mut buffer.as_slice())
             .map_err(|_| VaultError::Serialization)?;
-
         self.vault_state = Some(v_state.clone());
 
         // Derive key
-        self.crypto.init(password, &v_state.salt);
+        self.crypto.init(password, &v_state.salt)?;
 
         // Decrypt entries
-        let v_state = self.vault_state.as_ref().ok_or(VaultError::Locked)?;
+        // let v_state = self.vault_state.as_ref().ok_or(VaultError::Locked)?;
 
         let stream = self
             .crypto
             .decrypt(&v_state.cipher, &v_state.nonce)
-            .map_err(|_| VaultError::InvalidPassword);
+            .map_err(|_| {
+                self.vault_state = None;    //Invalid password, keeps vault locked
+                VaultError::InvalidPassword
+            });
 
         // Deserialize entries into BTreeMap
         self.entries = wincode::deserialize_from(&mut stream?.as_slice())
@@ -143,7 +143,7 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         }
         self.entries
             .remove(service)
-            .ok_or_else(|| VaultError::EntryNotFound)
+            .ok_or(VaultError::EntryNotFound)
     }
 
     pub fn get(&self, service: &str) -> Result<&Entry, VaultError> {
@@ -152,7 +152,7 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         }
         self.entries
             .get(service)
-            .ok_or_else(|| VaultError::EntryNotFound)
+            .ok_or(VaultError::EntryNotFound)
     }
 
     pub fn get_entries(&self) -> Result<Vec<String>, VaultError> {
@@ -163,7 +163,7 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
     }
 
     pub fn get_vaults(&self) -> Result<Vec<String>, VaultError> {
-        let vaults = self.storage.list_vaults()?; 
+        let vaults = self.storage.list_vaults()?;
         Ok(vaults)
     }
 }

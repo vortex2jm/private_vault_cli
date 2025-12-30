@@ -17,18 +17,19 @@ impl AesGcmCrypto {
         Self { key: None }
     }
 
-    fn derive_key(password: &str, salt: &[u8]) -> [u8; 32] {
+    fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32], CryptoError> {
         let mut output_key = [0u8; 32];
         Argon2::default()
             .hash_password_into(password.as_bytes(), salt, &mut output_key)
-            .expect("Failure on key derivation!\n");
-        output_key
+            .map_err(|_| CryptoError::KeyDerivationError)?;
+        Ok(output_key)
     }
 }
 
 impl CryptoPort for AesGcmCrypto {
-    fn init(&mut self, password: &str, salt: &[u8]) {
-        self.key = Some(Self::derive_key(password, salt));
+    fn init(&mut self, password: &str, salt: &[u8]) -> Result<(), CryptoError> {
+        self.key = Some(Self::derive_key(password, salt)?);
+        Ok(())
     }
 
     fn encrypt(&self, plaintext: &[u8]) -> Result<(Vec<u8>, [u8; 12]), CryptoError> {

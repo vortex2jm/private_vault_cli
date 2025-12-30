@@ -3,11 +3,8 @@ use std::io::{self, Write};
 use zeroize::Zeroize;
 
 use crate::{
-    application::engine::VaultEngine,
-    domain::{
-        commands::Command,
-        ports::{CryptoPort, StoragePort},
-    },
+    application::{commands::Command, engine::VaultEngine},
+    domain::ports::{CryptoPort, StoragePort},
     utils::parser,
 };
 

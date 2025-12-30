@@ -1,4 +1,4 @@
-use crate::domain::commands::Command;
+use crate::application::commands::Command;
 
 pub fn parse_command(input: &str) -> Option<Command> {
     let mut parts = input.trim().split_whitespace();
@@ -35,4 +35,3 @@ pub fn request_password() -> String {
     let password = rpassword::read_password().unwrap();
     password
 }
-

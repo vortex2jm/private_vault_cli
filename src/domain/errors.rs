@@ -20,14 +20,14 @@ pub enum VaultError {
     #[error("Serialization failed")]
     Serialization,
 
+    #[error("Invalid password or corrupted vault")]
+    InvalidPassword,
+
     #[error("Cryptography error: {0}")]
     Crypto(#[from] CryptoError),
 
     #[error("Storage error: {0}")]
     Storage(#[from] StorageError),
-
-    #[error("Invalid password or corrupted vault")]
-    InvalidPassword,
 }
 
 #[derive(Debug, Error)]
@@ -37,9 +37,6 @@ pub enum StorageError {
 
     #[error("Integrity check failed")]
     IntegrityError,
-
-    #[error("{0}")]
-    DirNotFound(String),
 }
 
 #[derive(Debug, Error)]
@@ -52,4 +49,7 @@ pub enum CryptoError {
 
     #[error("Aead error: {0}")]
     Aead(String),
+
+    #[error("Error while derivating key")]
+    KeyDerivationError,
 }

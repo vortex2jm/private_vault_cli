@@ -8,7 +8,7 @@ mod application;
 mod domain;
 mod utils;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {    
     let storage = FileStorage::new();
     let crypto = AesGcmCrypto::new();
     let engine = VaultEngine::new(storage, crypto);
