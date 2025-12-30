@@ -27,11 +27,11 @@ impl<S: StoragePort, C: CryptoPort> VaultEngine<S, C> {
         self.vault_state.is_none()
     }
 
-    fn current_vault(&self) -> Option<&str>{
+    pub fn current_vault(&self) -> Option<&str>{
         Some("teste")
     }
 
-    fn is_dirty(&self) -> bool{
+    pub fn is_dirty(&self) -> bool{
         true
     }
 
