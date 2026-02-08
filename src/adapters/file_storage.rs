@@ -43,6 +43,10 @@ impl StoragePort for FileStorage {
         self.path = self.base_path.join(path);
     }
 
+    fn get_path(&self) -> Option<String> {
+        self.path.to_str().map(|s| s.to_string())
+    }
+
     fn save(&self, data: &[u8]) -> Result<(), StorageError> {
         // Checks dir
         if let Some(parent) = self.path.parent() {

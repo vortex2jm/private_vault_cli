@@ -1,13 +1,8 @@
+mod commands;
+mod ui;
+
 use anyhow::Result;
-use rustyline::{
-    Editor, Helper,
-    completion::{Completer, Pair},
-    error::ReadlineError,
-    highlight::Highlighter,
-    hint::Hinter,
-    history::DefaultHistory,
-    validate::Validator,
-};
+use rustyline::{Editor, error::ReadlineError, history::DefaultHistory};
 use std::io::{self, Write};
 use zeroize::Zeroize;
 
@@ -16,92 +11,22 @@ use crate::{
     domain::ports::{CryptoPort, StoragePort},
 };
 
-/* =======================
-   ANSI COLORS
-======================= */
-const BLUE: &str = "\x1b[34m";
-const GREEN: &str = "\x1b[32m";
-const RED: &str = "\x1b[31m";
-const YELLOW: &str = "\x1b[33m";
-const CYAN: &str = "\x1b[36m";
-const RESET: &str = "\x1b[0m";
+use commands::Command;
+use ui::{BLUE, CYAN, GREEN, RED, RESET, VaultHelper, YELLOW};
 
-/* =======================
-   AUTOCOMPLETE
-======================= */
-struct VaultHelper {
-    commands: Vec<&'static str>,
-}
-
-impl Helper for VaultHelper {}
-impl Hinter for VaultHelper {
-    type Hint = String;
-}
-impl Highlighter for VaultHelper {}
-impl Validator for VaultHelper {}
-
-impl Completer for VaultHelper {
-    type Candidate = Pair;
-
-    fn complete(
-        &self,
-        line: &str,
-        pos: usize,
-        _: &rustyline::Context<'_>,
-    ) -> rustyline::Result<(usize, Vec<Pair>)> {
-        let start = 0;
-        let input = &line[..pos];
-
-        let matches = self
-            .commands
-            .iter()
-            .filter(|cmd| cmd.starts_with(input))
-            .map(|cmd| Pair {
-                display: cmd.to_string(),
-                replacement: cmd.to_string(),
-            })
-            .collect();
-
-        Ok((start, matches))
-    }
-}
-
-/* =======================
-   COMMAND ENUM
-======================= */
-enum Command {
-    Lock,
-    List,
-    Help,
-    Exit,
-    Commit,
-    Clear,
-    Get(String),
-    Unlock(String),
-    Create(String),
-    Remove(String),
-    Add { service: String, username: String },
-}
-
-/* =======================
-   CLI STRUCT
-======================= */
+/// Vault CLI struct, containing the engine and readline editor
 pub struct VaultCli<S: StoragePort, C: CryptoPort> {
     engine: VaultEngine<S, C>,
     rl: Editor<VaultHelper, DefaultHistory>,
 }
 
-/* =======================
-   IMPLEMENTATION
-======================= */
+/// Main CLI implementation, handling user input, commands, and interactions with the engine
 impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
     pub fn new(engine: VaultEngine<S, C>) -> Result<Self> {
-        let helper = VaultHelper {
-            commands: vec![
-                "create", "unlock", "lock", "add", "get", "rm", "commit", "ls", "list", "help",
-                "exit", "clear",
-            ],
-        };
+        let helper = VaultHelper::new(vec![
+            "create", "unlock", "lock", "add", "get", "rm", "commit", "ls", "list", "help", "exit",
+            "clear",
+        ]);
 
         let mut rl = Editor::<VaultHelper, DefaultHistory>::new()?;
         rl.set_helper(Some(helper));
@@ -109,6 +34,7 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
         Ok(Self { engine, rl })
     }
 
+    /// Main loop that runs the CLI, handling user input and commands
     pub fn run(&mut self) -> Result<()> {
         println!("--- Vault CLI ---\n");
 
@@ -156,9 +82,7 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
         Ok(())
     }
 
-    /* =======================
-       COMMAND PARSING
-    ======================= */
+    /// Parses user input into Command enum
     fn parse_command(&self, input: &str) -> Option<Command> {
         let mut p = input.split_whitespace();
         let cmd = p.next()?;
@@ -182,9 +106,7 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
         })
     }
 
-    /* =======================
-       COMMAND HANDLER
-    ======================= */
+    /// Handles parsed command and interacts with engine
     fn handle_command(&mut self, cmd: Command) -> Result<()> {
         match cmd {
             Command::Unlock(v) => {
@@ -244,8 +166,12 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
             }
 
             Command::Lock => {
-                self.engine.lock()?;
-                println!("Vault locked.\n");
+                if self.confirm_lock()? {
+                    self.engine.lock()?;
+                    println!("Vault locked.\n");
+                } else {
+                    println!("Aborted.\n");
+                }
             }
 
             Command::Clear => {
@@ -263,9 +189,7 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
         Ok(())
     }
 
-    /* =======================
-       EXIT CONFIRMATION
-    ======================= */
+    /// Prints confirmation message when exiting with unsaved changes
     fn confirm_exit(&mut self) -> Result<bool> {
         if self.engine.is_dirty() {
             println!("You have uncommitted changes.");
@@ -292,14 +216,42 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
         }
     }
 
-    /* =======================
-       PROMPT
-    ======================= */
+    /// Prints confirmation message when locking with unsaved changes
+    fn confirm_lock(&mut self) -> Result<bool> {
+        if self.engine.is_dirty() {
+            println!("You have uncommitted changes.");
+            println!("1) Commit and lock");
+            println!("2) Lock without committing");
+            println!("3) Cancel\n");
+
+            print!("Choose an option [1-3]: ");
+            io::stdout().flush()?;
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+
+            match input.trim() {
+                "1" => {
+                    self.engine.commit()?;
+                    Ok(true)
+                }
+                "2" => Ok(true),
+                _ => Ok(false),
+            }
+        } else {
+            Ok(true)
+        }
+    }
+
+    /// Generates dynamic prompt based on vault state
+    /// - Locked: vault[locked]>
+    /// - Unlocked: vault[vault_name|entry_count]>
+    /// - Unlocked and dirty: vault[vault_name*|entry_count]>
     fn prompt(&self) -> String {
         if self.engine.is_locked() {
             format!("{BLUE}vault{RESET}[{RED}locked{RESET}]> ")
         } else {
-            let name = self.engine.current_vault().unwrap_or("unknown");
+            let name = self.engine.current_vault().unwrap_or("unknown".into());
             let dirty = self.engine.is_dirty();
             let count = self.engine.get_entries().unwrap_or(Vec::new()).len();
 
@@ -313,15 +265,14 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
         }
     }
 
-    /* =======================
-       UTIL
-    ======================= */
+    /// Prompts user for password without echoing
     fn request_password(&self, label: &str) -> String {
         print!("{}", label);
         io::stdout().flush().unwrap();
         rpassword::read_password().unwrap()
     }
 
+    /// Prints confirmation message
     fn confirm(&self, msg: &str) -> bool {
         print!("{} (y/N): ", msg);
         io::stdout().flush().unwrap();
@@ -330,6 +281,7 @@ impl<S: StoragePort, C: CryptoPort> VaultCli<S, C> {
         matches!(input.trim(), "y" | "Y")
     }
 
+    /// Prints help message
     fn print_help() {
         println!(
             r#"
